@@ -1,11 +1,13 @@
-import 'dart:typed_data';
-
 import 'package:window_manager/window_manager.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'dart:async';
+
+import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
+
 import 'config.dart';
 
 void main() async {
@@ -86,15 +88,7 @@ class _HomePageState extends State<HomePage> {
   // 以 "asset:" 开头表示内置资源路径，否则为本地文件路径
   String? _currentWallpaper;
 
-  // 获取所有内置壁纸的资源路径
-  List<String> _getBuiltinWallpapers() {
-    return List.generate(
-      15,
-      (i) => 'assets/background/bg_${i.toString().padLeft(2, '0')}.jpg',
-    );
-  }
-
-  String get _defaultWallpaper => _getBuiltinWallpapers()[5]; // bg_05.jpg
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   void _log(String message) {
     setState(() {
@@ -102,7 +96,24 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  // 从文件选择壁纸（原有功能）
+  Future<void> _playClickSound(String assetPath) async {
+    try {
+      // await _audioPlayer.stop(); // 先停止之前可能正在播放的音效
+      await _audioPlayer.play(AssetSource(assetPath)); // 播放新音效
+    } catch (e) {
+      _log('播放音效失败: $e');
+    }
+  }
+
+  // 获取所有内置壁纸的资源路径
+  List<String> _getBuiltinWallpapers() => List.generate(
+    15,
+    (i) => 'assets/background/bg_${i.toString().padLeft(2, '0')}.jpg',
+  );
+
+  String get _defaultWallpaper => _getBuiltinWallpapers()[5]; // bg_05.jpg
+
+  // 从文件选择壁纸
   Future<void> _changeWallpaperFromFile() async {
     final result = await FilePicker.pickFiles(type: FileType.image);
     if (result != null && result.files.isNotEmpty) {
@@ -275,6 +286,7 @@ class _HomePageState extends State<HomePage> {
 
   // 启动服务器
   Future<void> _startServer() async {
+    _playClickSound('sounds/click_01.wav');
     if (_isServerRunning) {
       _log('服务器已在运行中');
       return;
@@ -379,6 +391,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _stopServer() {
+    _playClickSound('sounds/click_02.wav');
     if (!_isServerRunning) {
       _log('服务器未在运行');
       return;
