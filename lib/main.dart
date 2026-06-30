@@ -1,5 +1,4 @@
 import 'package:window_manager/window_manager.dart';
-// import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -7,8 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-const double defaultWindowWidth = 960;
-const double defaultWindowHeight = 540;
+import 'config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,9 +14,18 @@ void main() async {
   await windowManager.ensureInitialized();
 
   WindowOptions windowOptions = const WindowOptions(
-    size: Size(defaultWindowWidth, defaultWindowHeight),
-    minimumSize: Size(defaultWindowWidth, defaultWindowHeight),
-    maximumSize: Size(defaultWindowWidth, defaultWindowHeight),
+    size: Size(
+      AppConstants.windowWidthDefault,
+      AppConstants.windowHeightDefault,
+    ),
+    minimumSize: Size(
+      AppConstants.windowWidthDefault,
+      AppConstants.windowHeightDefault,
+    ),
+    maximumSize: Size(
+      AppConstants.windowWidthMax,
+      AppConstants.windowHeightMax,
+    ),
     center: true,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.normal,
@@ -27,7 +34,7 @@ void main() async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();
-    await windowManager.setResizable(false);
+    await windowManager.setResizable(true);
   });
 
   runApp(const MyApp());
@@ -45,6 +52,11 @@ class MyApp extends StatelessWidget {
           seedColor: Colors.blue,
           surfaceTint: Colors.transparent,
         ),
+        fontFamily: 'simhei', // 黑体
+        fontFamilyFallback: const [
+          'Microsoft YaHei', // 微软雅黑
+          'sans-serif', // 无衬线字体
+        ],
       ),
       home: const HomePage(),
     );
@@ -70,11 +82,26 @@ class _HomePageState extends State<HomePage> {
   bool _isServerRunning = false;
   bool _playerIsDead = false;
 
-  // 添加日志到输出框
+  String? wallpaperPath; // 自定义壁纸路径，null 则使用默认图片
+
   void _log(String message) {
     setState(() {
       outputController.text += '$message\n';
     });
+  }
+
+  // 更换壁纸
+  Future<void> _changeWallpaper() async {
+    final result = await FilePicker.pickFiles(type: FileType.image);
+    if (result != null && result.files.isNotEmpty) {
+      final filePath = result.files.single.path;
+      if (filePath != null) {
+        setState(() {
+          wallpaperPath = filePath;
+        });
+        _log('壁纸已更换：$filePath');
+      }
+    }
   }
 
   // 生成实际的 cfg 内容
@@ -162,7 +189,6 @@ class _HomePageState extends State<HomePage> {
       _server = await HttpServer.bind(addr, port);
       _isServerRunning = true;
       _log('服务器启动: $addr:$port');
-
       _handleRequests(_server!);
     } catch (e) {
       _log('服务器启动失败: $e');
@@ -229,15 +255,6 @@ class _HomePageState extends State<HomePage> {
             _log('执行指定操作（打开链接）。');
             final targetUrl = urlController.text;
 
-            /* 打开壁纸的备选方案
-            final uri = Uri.parse(targetUrl);
-            if (await canLaunchUrl(uri)) {
-              await launchUrl(uri);
-            } else {
-              _log('无法打开链接: $targetUrl');
-            }
-            */
-
             // 确保浏览器窗口可以被置顶
             await Process.run('cmd', ['/c', 'start', ' ', targetUrl]);
             _playerIsDead = true;
@@ -288,7 +305,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: false,
+      extendBodyBehindAppBar: true,
       extendBody: false,
       appBar: _buildAppBarView(),
       body: _buildBodyView(),
@@ -317,7 +334,7 @@ class _HomePageState extends State<HomePage> {
               ),
               Spacer(),
               IconButton(
-                onPressed: () {},
+                onPressed: _changeWallpaper, // 绑定更换壁纸方法
                 tooltip: '更换壁纸',
                 icon: const Icon(Icons.image, color: Colors.white),
               ),
@@ -329,138 +346,153 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildBodyView() {
-    return Row(
+    return Stack(
       children: [
-        // 左半区域
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 地址
-                Row(
-                  children: [
-                    const Text('地址：'),
-                    Expanded(
-                      child: TextField(
-                        controller: addressController,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 8,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // 端口
-                Row(
-                  children: [
-                    const Text('端口：'),
-                    Expanded(
-                      child: TextField(
-                        controller: portController,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 8,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // 启停按钮
-                Row(
-                  children: [
-                    ElevatedButton(
-                      onPressed: _startServer,
-                      child: const Text('启动'),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton(
-                      onPressed: _stopServer,
-                      child: const Text('停止'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // 保存配置文件按钮
-                ElevatedButton.icon(
-                  onPressed: _saveConfig,
-                  icon: const Icon(Icons.save),
-                  label: const Text('保存配置文件'),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '请将文件保存在：\nSteamLibrary\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                // 占据剩余空间，将网址输入推至底部
-                const Spacer(),
-                // 左下角：自定义网址
-                Row(
-                  children: [
-                    const Text('网址：'),
-                    Expanded(
-                      child: TextField(
-                        controller: urlController,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 8,
-                          ),
-                          hintText: '输入自定义链接',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+        // 最底层：壁纸
+        Positioned.fill(child: _buildWallpaper()),
+        // 中层：半透明黑色遮罩
+        Positioned.fill(
+          child: Container(color: const Color.fromRGBO(0, 0, 0, 0.5)),
         ),
-        // 右半区域
-        Expanded(
+        // 最上层：原有左右布局，留出顶部 AppBar 高度
+        Positioned.fill(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.only(top: 60), // AppBar 高度
+            child: Row(
               children: [
-                const Text('信息输出：', style: TextStyle(fontSize: 18)),
-                const SizedBox(height: 8),
+                // 左半区域
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 地址
+                        Row(
+                          children: [
+                            Text('地址：', style: AppConstants.textStyle()),
+                            Expanded(
+                              child: TextField(
+                                style: AppConstants.textFieldTextStyle(),
+                                controller: addressController,
+                                decoration: AppConstants.textFieldInputStyle(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // 端口
+                        Row(
+                          children: [
+                            Text('端口：', style: AppConstants.textStyle()),
+                            Expanded(
+                              child: TextField(
+                                style: AppConstants.textFieldTextStyle(),
+                                controller: portController,
+                                decoration: AppConstants.textFieldInputStyle(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        // 启停按钮
+                        Row(
+                          children: [
+                            ElevatedButton(
+                              onPressed: _startServer,
+                              style: AppConstants.buttonStyle(Colors.red),
+                              child: const Text('启动'),
+                            ),
+                            Spacer(),
+                            ElevatedButton(
+                              onPressed: _stopServer,
+                              style: AppConstants.buttonStyle(Colors.lightBlue),
+                              child: const Text('停止'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // 保存配置文件按钮
+                        ElevatedButton.icon(
+                          onPressed: _saveConfig,
+                          style: AppConstants.buttonStyle(
+                            Colors.white,
+                            backgroundColor: const Color.fromRGBO(
+                              79,
+                              22,
+                              236,
+                              0.4,
+                            ),
+                          ),
+                          icon: const Icon(Icons.save),
+                          label: const Text('保存配置文件'),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '请将文件保存在：\nSteamLibrary\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppConstants.defaultFontColor,
+                          ),
+                        ),
+                        const Spacer(),
+                        // 左下角：自定义网址
+                        Row(
+                          children: [
+                            Text('网址：', style: AppConstants.textStyle()),
+                            Expanded(
+                              child: TextField(
+                                style: AppConstants.textFieldTextStyle(),
+                                controller: urlController,
+                                decoration: AppConstants.textFieldInputStyle(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    child: TextField(
-                      style: TextStyle(
-                        fontWeight: .bold,
-                        fontSize: 16,
-                        color: outputControlTextColor,
-                      ),
-                      controller: outputController,
-                      maxLines: null,
-                      expands: true,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: const Color.fromRGBO(0, 0, 0, 0.85),
-                        hintText: '这里会打印服务器运行的结果。',
-                        hintStyle: TextStyle(color: outputControlTextColor),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(8),
-                      ),
-                      textAlignVertical: TextAlignVertical.top,
+                  ),
+                ),
+                // 右半区域
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('信息输出：', style: AppConstants.textStyle()),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: TextField(
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: outputControlTextColor,
+                              ),
+                              controller: outputController,
+                              maxLines: null,
+                              expands: true,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: const Color.fromRGBO(0, 0, 0, 0.85),
+                                hintText: '这里会打印服务器运行的结果。',
+                                hintStyle: TextStyle(
+                                  color: outputControlTextColor,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(8),
+                              ),
+                              textAlignVertical: TextAlignVertical.top,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -469,6 +501,23 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ],
+    );
+  }
+
+  // 壁纸构建组件
+  Widget _buildWallpaper() {
+    if (wallpaperPath != null) {
+      return Image.file(
+        File(wallpaperPath!),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(color: Colors.black),
+      );
+    }
+    // 默认壁纸，若未提供 assets/default_wallpaper.png 则显示纯黑背景
+    return Image.asset(
+      'assets/background/bg_05.jpg',
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Container(color: Colors.black),
     );
   }
 }

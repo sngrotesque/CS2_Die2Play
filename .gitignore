@@ -119,4 +119,5 @@ app.*.symbols
 !/dev/ci/**/Gemfile.lock
 
 # Other
-*.bat
+# *.bat
+# *.py
