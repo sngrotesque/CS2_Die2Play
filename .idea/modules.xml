@@ -2,8 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/death_detection.iml" filepath="$PROJECT_DIR$/death_detection.iml" />
-      <module fileurl="file://$PROJECT_DIR$/android/death_detection_android.iml" filepath="$PROJECT_DIR$/android/death_detection_android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/cs2_die2play.iml" filepath="$PROJECT_DIR$/cs2_die2play.iml" />
+      <module fileurl="file://$PROJECT_DIR$/android/cs2_die2play_android.iml" filepath="$PROJECT_DIR$/android/cs2_die2play_android.iml" />
     </modules>
   </component>
 </project>

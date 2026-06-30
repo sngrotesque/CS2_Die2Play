@@ -37,6 +37,7 @@ void main() async {
     await windowManager.show();
     await windowManager.focus();
     await windowManager.setResizable(true);
+    await windowManager.setTitle('CS2. Die to play'); // 不去更改 windows\runner\main.cpp 文件。
   });
 
   runApp(const MyApp());

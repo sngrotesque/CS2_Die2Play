@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "death_detection" "\0"
+            VALUE "FileDescription", "cs2_die2play" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "death_detection" "\0"
+            VALUE "InternalName", "cs2_die2play" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "death_detection.exe" "\0"
-            VALUE "ProductName", "death_detection" "\0"
+            VALUE "OriginalFilename", "cs2_die2play.exe" "\0"
+            VALUE "ProductName", "cs2_die2play" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
