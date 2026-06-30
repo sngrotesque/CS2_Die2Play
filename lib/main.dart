@@ -1,11 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:window_manager/window_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
 import 'config.dart';
 
 void main() async {
@@ -82,7 +82,19 @@ class _HomePageState extends State<HomePage> {
   bool _isServerRunning = false;
   bool _playerIsDead = false;
 
-  String? wallpaperPath; // 自定义壁纸路径，null 则使用默认图片
+  // 壁纸状态：null 表示使用第一张默认壁纸，非空字符串分两种：
+  // 以 "asset:" 开头表示内置资源路径，否则为本地文件路径
+  String? _currentWallpaper;
+
+  // 获取所有内置壁纸的资源路径
+  List<String> _getBuiltinWallpapers() {
+    return List.generate(
+      15,
+      (i) => 'assets/background/bg_${i.toString().padLeft(2, '0')}.jpg',
+    );
+  }
+
+  String get _defaultWallpaper => _getBuiltinWallpapers()[5]; // bg_05.jpg
 
   void _log(String message) {
     setState(() {
@@ -90,18 +102,108 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  // 更换壁纸
-  Future<void> _changeWallpaper() async {
+  // 从文件选择壁纸（原有功能）
+  Future<void> _changeWallpaperFromFile() async {
     final result = await FilePicker.pickFiles(type: FileType.image);
     if (result != null && result.files.isNotEmpty) {
       final filePath = result.files.single.path;
       if (filePath != null) {
         setState(() {
-          wallpaperPath = filePath;
+          _currentWallpaper = filePath; // 文件路径不带前缀
         });
         _log('壁纸已更换：$filePath');
       }
     }
+  }
+
+  // 弹出默认壁纸选择对话框
+  Future<void> _showDefaultWallpaperPicker() async {
+    final wallpapers = _getBuiltinWallpapers();
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('选择默认壁纸'),
+        content: SizedBox(
+          width: 400,
+          height: 300,
+          child: GridView.builder(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 5,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+            ),
+            itemCount: wallpapers.length,
+            itemBuilder: (context, index) {
+              return InkWell(
+                onTap: () => Navigator.pop(ctx, wallpapers[index]),
+                child: Image.asset(
+                  wallpapers[index],
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Icon(Icons.broken_image),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (selected != null) {
+      setState(() {
+        _currentWallpaper = 'asset:$selected'; // 标记为内置资源
+      });
+      _log('壁纸已更换：内置 #${wallpapers.indexOf(selected) + 1}');
+    }
+  }
+
+  // 保存当前壁纸到指定路径
+  Future<void> _saveCurrentWallpaper() async {
+    final saveDir = await FilePicker.getDirectoryPath();
+    if (saveDir == null) return;
+
+    try {
+      File sourceFile;
+      String fileName;
+
+      if (_currentWallpaper == null ||
+          _currentWallpaper!.startsWith('asset:')) {
+        // 当前为内置壁纸，需要先提取资源并保存
+        final assetPath = _currentWallpaper != null
+            ? _currentWallpaper!.substring(6) // 去掉 "asset:" 前缀
+            : _defaultWallpaper;
+        final bytes = await _loadAssetBytes(assetPath);
+        fileName = assetPath.split('/').last;
+        sourceFile = File('$saveDir/$fileName');
+        await sourceFile.writeAsBytes(bytes);
+      } else {
+        // 当前为用户自定义文件，直接复制
+        sourceFile = File(_currentWallpaper!);
+        fileName = sourceFile.uri.pathSegments.last;
+        final destFile = File('$saveDir/$fileName');
+        await sourceFile.copy(destFile.path);
+      }
+
+      _log('壁纸已保存到：$saveDir/$fileName');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('壁纸已保存：$saveDir/$fileName')));
+      }
+    } catch (e) {
+      _log('保存壁纸失败: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
+      }
+    }
+  }
+
+  // 从 assets 读取文件字节
+  Future<Uint8List> _loadAssetBytes(String assetPath) async {
+    final bundle = DefaultAssetBundle.of(context);
+    final byteData = await bundle.load(assetPath);
+    return byteData.buffer.asUint8List();
   }
 
   // 生成实际的 cfg 内容
@@ -254,8 +356,6 @@ class _HomePageState extends State<HomePage> {
           } else {
             _log('执行指定操作（打开链接）。');
             final targetUrl = urlController.text;
-
-            // 确保浏览器窗口可以被置顶
             await Process.run('cmd', ['/c', 'start', ' ', targetUrl]);
             _playerIsDead = true;
           }
@@ -278,7 +378,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 手动停止服务器
   void _stopServer() {
     if (!_isServerRunning) {
       _log('服务器未在运行');
@@ -332,11 +431,28 @@ class _HomePageState extends State<HomePage> {
                 'CS2 GameStateIntegration 配置',
                 style: TextStyle(color: Colors.white, fontSize: 24),
               ),
-              Spacer(),
-              IconButton(
-                onPressed: _changeWallpaper, // 绑定更换壁纸方法
-                tooltip: '更换壁纸',
+              const Spacer(),
+              PopupMenuButton<String>(
                 icon: const Icon(Icons.image, color: Colors.white),
+                tooltip: '壁纸选项',
+                onSelected: (value) {
+                  switch (value) {
+                    case 'builtin':
+                      _showDefaultWallpaperPicker();
+                      break;
+                    case 'file':
+                      _changeWallpaperFromFile();
+                      break;
+                    case 'save':
+                      _saveCurrentWallpaper();
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'builtin', child: Text('选择默认壁纸')),
+                  const PopupMenuItem(value: 'file', child: Text('从文件选择壁纸')),
+                  const PopupMenuItem(value: 'save', child: Text('保存当前壁纸')),
+                ],
               ),
             ],
           ),
@@ -348,26 +464,21 @@ class _HomePageState extends State<HomePage> {
   Widget _buildBodyView() {
     return Stack(
       children: [
-        // 最底层：壁纸
         Positioned.fill(child: _buildWallpaper()),
-        // 中层：半透明黑色遮罩
         Positioned.fill(
           child: Container(color: const Color.fromRGBO(0, 0, 0, 0.5)),
         ),
-        // 最上层：原有左右布局，留出顶部 AppBar 高度
         Positioned.fill(
           child: Padding(
-            padding: const EdgeInsets.only(top: 60), // AppBar 高度
+            padding: const EdgeInsets.only(top: 60),
             child: Row(
               children: [
-                // 左半区域
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 地址
                         Row(
                           children: [
                             Text('地址：', style: AppConstants.textStyle()),
@@ -381,7 +492,6 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        // 端口
                         Row(
                           children: [
                             Text('端口：', style: AppConstants.textStyle()),
@@ -395,7 +505,6 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        // 启停按钮
                         Row(
                           children: [
                             ElevatedButton(
@@ -403,7 +512,7 @@ class _HomePageState extends State<HomePage> {
                               style: AppConstants.buttonStyle(Colors.red),
                               child: const Text('启动'),
                             ),
-                            Spacer(),
+                            const Spacer(),
                             ElevatedButton(
                               onPressed: _stopServer,
                               style: AppConstants.buttonStyle(Colors.lightBlue),
@@ -412,7 +521,6 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // 保存配置文件按钮
                         ElevatedButton.icon(
                           onPressed: _saveConfig,
                           style: AppConstants.buttonStyle(
@@ -436,7 +544,6 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                         const Spacer(),
-                        // 左下角：自定义网址
                         Row(
                           children: [
                             Text('网址：', style: AppConstants.textStyle()),
@@ -453,7 +560,6 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 ),
-                // 右半区域
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -504,18 +610,28 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // 壁纸构建组件
   Widget _buildWallpaper() {
-    if (wallpaperPath != null) {
-      return Image.file(
-        File(wallpaperPath!),
+    String? source = _currentWallpaper;
+
+    if (source == null) {
+      // 默认第一张内置壁纸
+      return Image.asset(
+        _defaultWallpaper,
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => Container(color: Colors.black),
       );
     }
-    // 默认壁纸，若未提供 assets/default_wallpaper.png 则显示纯黑背景
-    return Image.asset(
-      'assets/background/bg_05.jpg',
+
+    if (source.startsWith('asset:')) {
+      return Image.asset(
+        source.substring(6),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(color: Colors.black),
+      );
+    }
+
+    return Image.file(
+      File(source),
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => Container(color: Colors.black),
     );
