@@ -95,8 +95,9 @@ class _HomePageState extends State<HomePage> {
   final ScrollController _scrollController = ScrollController();
 
   void _log(String message) {
+    final timeStamp = DateTime.now().millisecondsSinceEpoch;
     setState(() {
-      outputController.text += '$message\n';
+      outputController.text += '$timeStamp $message\n';
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -346,7 +347,7 @@ class _HomePageState extends State<HomePage> {
         Map<String, dynamic> data;
         try {
           data = json.decode(body) as Map<String, dynamic>;
-          _log('$data');
+          debugPrint('调试：${json.encode(data)}');
         } catch (e) {
           _log('JSON 解析失败: $e');
           request.response.statusCode = 400;
@@ -354,17 +355,6 @@ class _HomePageState extends State<HomePage> {
           continue;
         }
 
-        if (_playerIsDead &&
-            data.containsKey('previously') &&
-            data['previously']['player']) {
-          _forusCS2Window();
-          _log('玩家已重生，拉回CS2窗口。');
-          _playerIsDead = false;
-
-          request.response.statusCode = 200;
-          request.response.close();
-          continue;
-        }
         if (!data.containsKey('player')) {
           _log('非任何观察视角，比如本回合结束/未开始等');
           request.response.statusCode = 200;
@@ -385,6 +375,27 @@ class _HomePageState extends State<HomePage> {
           request.response.statusCode = 200;
           request.response.close();
           continue;
+        }
+
+        if (_playerIsDead && data.containsKey('previously')) {
+          debugPrint('逻辑调试，${json.encode(data)}');
+          late bool res;
+          try {
+            res = (data['previously']['player'] as bool);
+          } catch (e) {
+            if ((data['previously']['player']['state']['health'] as int) != 0) {
+              res = true;
+            }
+          }
+          if (res) {
+            _forusCS2Window();
+            _log('玩家已重生，拉回CS2窗口。');
+            _playerIsDead = false;
+
+            request.response.statusCode = 200;
+            request.response.close();
+            continue;
+          }
         }
 
         final state = player['state'] as Map<String, dynamic>?;
