@@ -37,7 +37,9 @@ void main() async {
     await windowManager.show();
     await windowManager.focus();
     await windowManager.setResizable(true);
-    await windowManager.setTitle('CS2. Die to play'); // 不去更改 windows\runner\main.cpp 文件。
+    await windowManager.setTitle(
+      'CS2. Die to play',
+    ); // 不去更改 windows\runner\main.cpp 文件。
   });
 
   runApp(const MyApp());
@@ -90,10 +92,16 @@ class _HomePageState extends State<HomePage> {
   String? _currentWallpaper;
 
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final ScrollController _scrollController = ScrollController();
 
   void _log(String message) {
     setState(() {
       outputController.text += '$message\n';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
     });
   }
 
@@ -103,6 +111,19 @@ class _HomePageState extends State<HomePage> {
       await _audioPlayer.play(AssetSource(assetPath)); // 播放新音效
     } catch (e) {
       _log('播放音效失败: $e');
+    }
+  }
+
+  // 将CS2拉回前台
+  Future<void> _forusCS2Window() async {
+    try {
+      await Process.run('powershell', [
+        '-Command',
+        r'(New-Object -ComObject WScript.Shell).AppActivate((Get-Process -Name "cs2").Id)',
+      ]);
+      _log('已将 CS2 窗口置顶');
+    } catch (e) {
+      _log('拉回 CS2 失败: $e');
     }
   }
 
@@ -325,6 +346,7 @@ class _HomePageState extends State<HomePage> {
         Map<String, dynamic> data;
         try {
           data = json.decode(body) as Map<String, dynamic>;
+          _log('$data');
         } catch (e) {
           _log('JSON 解析失败: $e');
           request.response.statusCode = 400;
@@ -332,6 +354,17 @@ class _HomePageState extends State<HomePage> {
           continue;
         }
 
+        if (_playerIsDead &&
+            data.containsKey('previously') &&
+            data['previously']['player']) {
+          _forusCS2Window();
+          _log('玩家已重生，拉回CS2窗口。');
+          _playerIsDead = false;
+
+          request.response.statusCode = 200;
+          request.response.close();
+          continue;
+        }
         if (!data.containsKey('player')) {
           _log('非任何观察视角，比如本回合结束/未开始等');
           request.response.statusCode = 200;
@@ -362,7 +395,14 @@ class _HomePageState extends State<HomePage> {
           continue;
         }
 
-        final health = state['health'] as int? ?? 100;
+        final health = state['health'] as int?;
+        if (health == null) {
+          _log('血量信息缺失，跳过。');
+          request.response.statusCode = 200;
+          request.response.close();
+          continue;
+        }
+
         if (health == 0) {
           if (_playerIsDead) {
             _log('玩家已经阵亡，跳过执行。');
@@ -580,7 +620,21 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('信息输出：', style: AppConstants.textStyle()),
+                        Row(
+                          children: [
+                            Text('信息输出：', style: AppConstants.textStyle()),
+                            Spacer(),
+                            ElevatedButton(
+                              onPressed: () {
+                                outputController.text = '';
+                              },
+                              style: AppConstants.buttonStyle(
+                                AppConstants.defaultFontColor,
+                              ),
+                              child: Text('清空控制台'),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                         Expanded(
                           child: Container(
@@ -598,6 +652,7 @@ class _HomePageState extends State<HomePage> {
                               maxLines: null,
                               expands: true,
                               readOnly: true,
+                              scrollController: _scrollController,
                               decoration: InputDecoration(
                                 filled: true,
                                 fillColor: const Color.fromRGBO(0, 0, 0, 0.85),
