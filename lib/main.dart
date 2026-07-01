@@ -9,7 +9,37 @@ import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
+import 'dart:ffi' hide Size;
+
 import 'config.dart';
+
+// C++ 代码调用
+typedef NativeBringToFront = Bool Function(Pointer<Utf8> processName);
+typedef DartBringToFront = bool Function(Pointer<Utf8> processName);
+
+class CS2WindowManager {
+  late final DynamicLibrary _lib;
+  late final DartBringToFront _bringToFront;
+
+  CS2WindowManager() {
+    _lib = DynamicLibrary.open('BringToFront.dll');
+    _bringToFront = _lib.lookupFunction<NativeBringToFront, DartBringToFront>(
+      'BringWindowToFront',
+    );
+  }
+
+  /// 将指定进程名的窗口置顶
+  bool bringToFront(String processName) {
+    // 将 Dart 字符串转为 null 结尾的指针
+    final Pointer<Utf8> namePtr = processName.toNativeUtf8();
+    try {
+      return _bringToFront(namePtr);
+    } finally {
+      malloc.free(namePtr); // 必须释放刚才分配的内存，否则会泄漏
+    }
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -122,11 +152,8 @@ class _HomePageState extends State<HomePage> {
   // 将CS2拉回前台
   Future<void> _forusCS2Window() async {
     try {
-      await Process.run('powershell', [
-        '-Command',
-        r'(New-Object -ComObject WScript.Shell).AppActivate((Get-Process -Name "cs2").Id)',
-      ]);
       _log('已将 CS2 窗口置顶');
+      CS2WindowManager().bringToFront('cs2.exe');
     } catch (e) {
       _log('拉回 CS2 失败: $e');
     }
@@ -573,6 +600,23 @@ class _HomePageState extends State<HomePage> {
                               },
                               style: AppConstants.buttonStyle(Colors.amber),
                               child: const Text('打开游戏'),
+                            ),
+                            const Spacer(flex: 1),
+                            ElevatedButton(
+                              onPressed: () {
+                                Process.run('cmd', [
+                                  '/c',
+                                  'taskkill',
+                                  '/f',
+                                  '/im',
+                                  'cs2.exe',
+                                ]);
+                              },
+                              style: AppConstants.buttonStyle(
+                                Colors.white,
+                                backgroundColor: Color.fromRGBO(255, 0, 0, 0.5),
+                              ),
+                              child: const Text('杀死游戏'),
                             ),
                           ],
                         ),
