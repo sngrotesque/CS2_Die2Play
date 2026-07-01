@@ -1,5 +1,14 @@
 # CS2_Die2Play
+
 游玩CS2时，被击杀即跳转的程序；使用Flutter框架开发，Windows平台。
+
+---
+
+# 预览图
+
+![](./assets/preview/a.png)
+
+---
 
 教程视频：  
 [我制作了一个CS2被击杀就刷抖音的程序 - 哔哩哔哩](https://www.bilibili.com/video/BV1h5Tv6KEHi/)  
