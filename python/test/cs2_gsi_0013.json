@@ -1,0 +1,14 @@
+{
+    "provider": {
+        "name": "Counter-Strike: Global Offensive",
+        "appid": 730,
+        "version": 14166,
+        "steamid": "1234567890123456",
+        "timestamp": 1782886146
+    },
+    "player": {
+        "steamid": "1234567890123456",
+        "name": "世一狙神香奈美",
+        "activity": "menu"
+    }
+}

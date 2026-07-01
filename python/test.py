@@ -1,4 +1,5 @@
 import webbrowser
+import subprocess
 import hashlib
 import socket
 import json
@@ -38,7 +39,7 @@ def recv_all(fd : socket.socket):
     fd.settimeout(None)
     return data
 
-def parse_client_data(data :bytes):
+def parse_client_data(data :bytes) -> dict:
     client_data_body_index = data.find(b'\r\n\r\n') + 4
     client_data_body = data[client_data_body_index:]
     client_data_body = client_data_body.decode()
@@ -59,22 +60,22 @@ def json_stream(data :dict, print_json :bool = True, write_json :str = None) -> 
     '''
     def anonymization(data :dict):
         data['provider']['steamid'] = '1234567890123456'
-        data['player']['steamid']   = '1234567890123456'
+        if data.get('player'):
+            data['player']['steamid']   = '1234567890123456'
         return data
 
     if print_json:
         json_data = json.dumps(data, ensure_ascii=False, indent=4)
         print(f'[*] 获取客户端数据：\n{json_data}')
 
-    if isinstance(write_json, (bool)):
-        print('[x] write_json 应是保存路径而不是布尔值。')
-        return
-
     if isinstance(write_json, (str)):
         with open(write_json, 'w', encoding='utf-8') as f:
             json_data = anonymization(data)
             json_data = json.dumps(json_data, ensure_ascii=False, indent=4)
-            f.wriet(json_data)
+            f.write(json_data)
+
+def run(cmd :str):
+    return subprocess.run(cmd, shell=True, stderr=subprocess.STDOUT, stdout=subprocess.PIPE).stdout.decode('gb18030')
 
 def test(
     bind_addr :str = '127.0.0.1',
@@ -93,11 +94,9 @@ def test(
             print(f'[+] 客户端 {c_addr} 已连接。')
 
             client_data = parse_client_data(recv_all(client))
+            client_data_save_path = os.path.join(save_folder, f'cs2_gsi_{seq:>04d}.json')
 
-            json_stream(
-                client_data, 
-                write_json=os.path.join(save_folder, f'cs2_gsi_{seq:>04d}.json')
-            )
+            json_stream(client_data, write_json=None)
 
             client.send((
                 'HTTP/1.0 200 OK\r\n'
@@ -105,6 +104,8 @@ def test(
                 '\r\n'
             ).encode())
             client.close()
+
+            seq += 1
     except KeyboardInterrupt:
         print(f'[*] 退出服务器。')
         server.close()
@@ -112,13 +113,36 @@ def test(
         print(f'[x] 出现致命错误！服务器无法继续！\n{e}')
 
 def main():
-    cfg_path = r"G:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive\game\csgo\cfg\gamestate_integration_cs2_die2play.cfg"
+    # 检查是否已经写入CFG文件，如果是，跳过。
+    cfg_origin_path = 'gamestate_integration_cs2.cfg'
+    cfg_save_path = 'G:/SteamLibrary/steamapps/common/Counter-Strike Global Offensive/game/csgo/cfg/gamestate_integration_cs2_die2play.cfg'
     cfg_content = None
+    write_cfg = False
 
-    with open('gamestate_integration_cs2.cfg', 'r', encoding='utf-8') as f:
-        cfg_content = f.read().split('---')[0]
-    with open(cfg_path, 'w', encoding='utf-8') as f:
-        f.write(cfg_content)
+    with open(cfg_origin_path, 'r', encoding='utf-8') as f:
+        cfg_content = f.read().split('---')[0].strip()
+
+    if os.path.exists(cfg_save_path):
+        if get_file_hash(cfg_origin_path) != get_file_hash(cfg_save_path):
+            write_cfg = True
+    else:
+        write_cfg = True
+
+    if write_cfg:
+        print(f'[*] 检测到 CFG 未正确写入，将写入。')
+        with open(cfg_save_path, 'w', encoding='utf-8') as f:
+            f.write(cfg_content)
+
+    # 如果重新写入了CFG文件
+    if write_cfg:
+        print(f'[*] 由于 CFG 文件已更新，需要重启一次游戏。')
+        # 检查是否存在CS2进程，如果是，杀死并重启。
+        res = run('tasklist | findstr /i cs2.exe').split()
+        if res and (res[0] == 'cs2.exe'):
+            print(f'[+] 检测到 CS2 进程[{res[1]}]，杀死。')
+            run('taskkill /f /im cs2.exe')
+        # 重启CS2进程（为了保证它会重新读CFG文件）
+        webbrowser.open('steam://rungameid/730')
 
     test()
 

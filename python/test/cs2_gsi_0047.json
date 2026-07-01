@@ -1,0 +1,55 @@
+{
+    "provider": {
+        "name": "Counter-Strike: Global Offensive",
+        "appid": 730,
+        "version": 14166,
+        "steamid": "1234567890123456",
+        "timestamp": 1782886198
+    },
+    "map": {
+        "mode": "scrimcomp2v2",
+        "name": "de_vertigo",
+        "phase": "live",
+        "round": 1,
+        "team_ct": {
+            "score": 0,
+            "consecutive_round_losses": 1,
+            "timeouts_remaining": 1,
+            "matches_won_this_series": 0
+        },
+        "team_t": {
+            "score": 1,
+            "consecutive_round_losses": 0,
+            "timeouts_remaining": 1,
+            "matches_won_this_series": 0
+        },
+        "num_matches_to_win_series": 0
+    },
+    "round": {
+        "phase": "live"
+    },
+    "player": {
+        "steamid": "1234567890123456",
+        "name": "世一狙神香奈美",
+        "observer_slot": 2,
+        "team": "T",
+        "activity": "playing",
+        "state": {
+            "health": 100,
+            "armor": 100,
+            "helmet": false,
+            "flashed": 0,
+            "smoked": 0,
+            "burning": 0,
+            "money": 3500,
+            "round_kills": 0,
+            "round_killhs": 0,
+            "equip_value": 850
+        }
+    },
+    "previously": {
+        "round": {
+            "phase": "freezetime"
+        }
+    }
+}
