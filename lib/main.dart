@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
@@ -79,9 +80,12 @@ class _HomePageState extends State<HomePage> {
   final addressController = TextEditingController(text: '127.0.0.1');
   final portController = TextEditingController(text: '23331');
   final outputController = TextEditingController();
-  final urlController = TextEditingController(text: 'https://www.google.com/');
+  final urlController = TextEditingController(
+    text: 'https://www.douyin.com/?recommend=1',
+  );
 
   final Color outputControlTextColor = const Color.fromRGBO(59, 211, 137, 1);
+  final String configFilename = 'gamestate_integration_cs2_die2play.cfg';
 
   HttpServer? _server;
   bool _isServerRunning = false;
@@ -97,7 +101,7 @@ class _HomePageState extends State<HomePage> {
   void _log(String message) {
     final timeStamp = DateTime.now().millisecondsSinceEpoch;
     setState(() {
-      outputController.text += '$timeStamp $message\n';
+      outputController.text += '${timeStamp ~/ 1000} $message\n';
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -245,19 +249,20 @@ class _HomePageState extends State<HomePage> {
     final addr = addressController.text;
     final port = portController.text;
     String cfgContent =
-        ('"CS2 automatically executed"\n'
+        ('"CS2_Die2Play"\n'
         '{\n'
-        '  "uri"             "http://$addr:$port"\n'
-        '  "timeout"         "5.0"\n'
-        '  "buffer"          "0.1"\n'
-        '  "throttle"        "0.1"\n'
-        '  "heartbeat"       "30.0"\n'
-        '  "data"\n'
-        '  {\n'
-        '    "provider"      "1"\n'
-        '    "player_id"     "1"\n'
-        '    "player_state"  "1"\n'
-        '  }\n'
+        '    "uri"               "http://$addr:$port"\n' // 服务器地址和端口
+        '    "timeout"           "5.0"\n' // 超时时间，如果服务器超时之前未响应游戏丢弃此请求。
+        '    "buffer"            "0.0"\n' // 用于合并短时间内的多次事件，减少请求数量。设置为 0.0 不合并。
+        '    "throttle"          "0.5"\n' // 节流阀，最快每{throttle}秒发一次更新。
+        '    "heartbeat"         "1.0"\n' // 心跳包每{heartbeat}秒发一次（这个必须要有且必须短）。
+        '    "data" {\n' // 数据段（1为真，0为假）
+        '        "provider"       "1"\n' // 包含游戏提供者的信息（如SteamId、版本号、时间戳等）。
+        '        "map"            "1"\n' // 当前地图信息（如地图名、回合数等）。
+        '        "round"          "1"\n' // 当前回合状态（如CT、T）。
+        '        "player_id"      "1"\n' // 玩家身份信息（如SteamId、名字），用于判断玩家身份防止看队友的时候也跳转。
+        '        "player_state"   "1"\n' // 关键，当前玩家状态（包含生命值、护甲值、金钱等）。
+        '    }\n'
         '}\n');
     return cfgContent;
   }
@@ -268,10 +273,12 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('保存提示'),
-        content: const Text(
-          '默认路径通常为：\n'
-          'SteamLibrary\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg\n\n'
-          '由于CS2识别固定文件名，所以将文件名将固定为 gamestate_integration_cs2.cfg',
+        content: Text(
+          '默认路径为：\n'
+          '{你的Steam安装目录}\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg\n\n'
+          '由于CS2识别固定文件名，所以将文件名将固定为 $configFilename\n\n'
+          '点击“我知道了”开始保存。',
+          style: TextStyle(fontSize: 16),
         ),
         actions: [
           TextButton(
@@ -289,7 +296,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     try {
-      final file = File('$selectedDirectory/gamestate_integration_cs2.cfg');
+      final file = File('$selectedDirectory/$configFilename');
       await file.writeAsString(_buildCfgContent());
       _log('配置文件已保存到: ${file.path}');
       if (mounted) {
@@ -380,7 +387,7 @@ class _HomePageState extends State<HomePage> {
         }
 
         final int health = data['player']['state']['health'] as int;
-        if (_playerIsDead && (health == 0)) {
+        if (_playerIsDead && (health == 100)) {
           _log('玩家已复活，拉回CS2。');
           _forusCS2Window();
           _playerIsDead = false;
@@ -392,15 +399,12 @@ class _HomePageState extends State<HomePage> {
         if (health == 0) {
           if (_playerIsDead) {
             _log('玩家未复活，跳过。');
-            request.response.statusCode = 200;
-            request.response.close();
-            continue;
+          } else {
+            _log('玩家被击杀。');
+            _playerIsDead = true;
+            final targetUrl = urlController.text;
+            await Process.run('cmd', ['/c', 'start', ' ', targetUrl]);
           }
-          _log('玩家被击杀。');
-          _playerIsDead = true;
-          final targetUrl = urlController.text;
-          await Process.run('cmd', ['/c', 'start', ' ', targetUrl]);
-
           request.response.statusCode = 200;
           request.response.close();
           continue;
@@ -553,11 +557,22 @@ class _HomePageState extends State<HomePage> {
                               style: AppConstants.buttonStyle(Colors.red),
                               child: const Text('启动'),
                             ),
-                            const Spacer(),
+                            const Spacer(flex: 1),
                             ElevatedButton(
                               onPressed: _stopServer,
                               style: AppConstants.buttonStyle(Colors.lightBlue),
                               child: const Text('停止'),
+                            ),
+                            const Spacer(flex: 9),
+                            ElevatedButton(
+                              onPressed: () {
+                                final gameUrl = Uri.parse(
+                                  'steam://rungameid/730',
+                                );
+                                launchUrl(gameUrl);
+                              },
+                              style: AppConstants.buttonStyle(Colors.amber),
+                              child: const Text('打开游戏'),
                             ),
                           ],
                         ),
@@ -574,11 +589,11 @@ class _HomePageState extends State<HomePage> {
                             ),
                           ),
                           icon: const Icon(Icons.save),
-                          label: const Text('保存配置文件'),
+                          label: const Text('保存 CFG 文件'),
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          '请将文件保存在：\nSteamLibrary\\steamapps\\common\\Counter-Strike Global Offensive\\game\\csgo\\cfg',
+                          '由于使用了GSI功能，所以必须结合CFG文件使用。\n请将CFG保存到你的CS2路径下。',
                           style: TextStyle(
                             fontSize: 14,
                             color: AppConstants.defaultFontColor,
@@ -611,6 +626,15 @@ class _HomePageState extends State<HomePage> {
                           children: [
                             Text('信息输出：', style: AppConstants.textStyle()),
                             Spacer(),
+                            ElevatedButton(
+                              onPressed: () {
+                                outputController.text = '目前此功能仅为保留，无实际功能。';
+                              },
+                              style: AppConstants.buttonStyle(
+                                AppConstants.defaultFontColor,
+                              ),
+                              child: Text('查找CS2路径'),
+                            ),
                             ElevatedButton(
                               onPressed: () {
                                 outputController.text = '';
