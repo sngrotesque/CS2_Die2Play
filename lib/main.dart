@@ -355,60 +355,35 @@ class _HomePageState extends State<HomePage> {
           continue;
         }
 
-        if (!data.containsKey('player')) {
-          _log('非任何观察视角，比如本回合结束/未开始等');
+        if (data['map'] == null) {
+          _log('玩家还未进入游戏，正在大厅。');
           request.response.statusCode = 200;
           request.response.close();
           continue;
         }
 
-        final provider = data['provider'] as Map<String, dynamic>?;
-        final player = data['player'] as Map<String, dynamic>?;
-        if (provider == null || player == null) {
+        if (data['player'] == null) {
+          _log('未正式开始游戏，正在过场动画。');
           request.response.statusCode = 200;
           request.response.close();
           continue;
         }
 
-        if (provider['steamid'] != player['steamid']) {
-          _log('不是玩家本人，跳过执行。');
+        final String providerId = data['provider']['steamid'] as String;
+        final String currentPlayerId = data['player']['steamid'] as String;
+
+        if (providerId != currentPlayerId) {
+          _log('当前非玩家本人。');
           request.response.statusCode = 200;
           request.response.close();
           continue;
         }
 
-        if (_playerIsDead && data.containsKey('previously')) {
-          debugPrint('逻辑调试，${json.encode(data)}');
-          late bool res;
-          try {
-            res = (data['previously']['player'] as bool);
-          } catch (e) {
-            if ((data['previously']['player']['state']['health'] as int) != 0) {
-              res = true;
-            }
-          }
-          if (res) {
-            _forusCS2Window();
-            _log('玩家已重生，拉回CS2窗口。');
-            _playerIsDead = false;
-
-            request.response.statusCode = 200;
-            request.response.close();
-            continue;
-          }
-        }
-
-        final state = player['state'] as Map<String, dynamic>?;
-        if (state == null) {
-          _log('玩家未在对局中，等待进入游戏...');
-          request.response.statusCode = 200;
-          request.response.close();
-          continue;
-        }
-
-        final health = state['health'] as int?;
-        if (health == null) {
-          _log('血量信息缺失，跳过。');
+        final int health = data['player']['state']['health'] as int;
+        if (_playerIsDead && (health == 0)) {
+          _log('玩家已复活，拉回CS2。');
+          _forusCS2Window();
+          _playerIsDead = false;
           request.response.statusCode = 200;
           request.response.close();
           continue;
@@ -416,21 +391,22 @@ class _HomePageState extends State<HomePage> {
 
         if (health == 0) {
           if (_playerIsDead) {
-            _log('玩家已经阵亡，跳过执行。');
-          } else {
-            _log('执行指定操作（打开链接）。');
-            final targetUrl = urlController.text;
-            await Process.run('cmd', ['/c', 'start', ' ', targetUrl]);
-            _playerIsDead = true;
+            _log('玩家未复活，跳过。');
+            request.response.statusCode = 200;
+            request.response.close();
+            continue;
           }
-        } else {
-          _log('玩家未阵亡，重新计算。');
-          _playerIsDead = false;
+          _log('玩家被击杀。');
+          _playerIsDead = true;
+          final targetUrl = urlController.text;
+          await Process.run('cmd', ['/c', 'start', ' ', targetUrl]);
+
+          request.response.statusCode = 200;
+          request.response.close();
+          continue;
         }
 
         request.response.statusCode = 200;
-        request.response.headers.contentType = ContentType.text;
-        request.response.write('OK');
         await request.response.close();
       } catch (e) {
         _log('处理请求时出错: $e');
